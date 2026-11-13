@@ -1,0 +1,166 @@
+name: Release
+
+# On a v* tag: check the tag against pyproject.toml, test, type-check, build, publish to PyPI by trusted
+# publishing (no token), create the GitHub release from the CHANGELOG block, then verify the published version
+# installs on Linux and macOS.
+#
+# One-time setup before the first tag (operator):
+#   1. PyPI: register a pending trusted publisher (https://pypi.org/manage/account/publishing/):
+#        PyPI project name: gigai-core
+#        Owner:             karthik446
+#        Repository name:   gigai-core
+#        Workflow name:     release.yml
+#        Environment name:  pypi
+#   2. GitHub: create the `pypi` environment on the repo (Settings -> Environments).
+#   3. Bump `version` in pyproject.toml, add the `## <version> - <date>` block to CHANGELOG.md, run `uv lock`,
+#      commit, then `git tag v<version> && git push origin v<version>`.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  UV_PYTHON_PREFERENCE: only-managed
+
+jobs:
+  build:
+    name: "check tag, test, build"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: "the tag matches pyproject.toml"
+        run: |
+          version="$(uv run --no-project --python 3.11 python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match pyproject.toml version ${version}" >&2
+            exit 1
+          fi
+      - run: uv sync --locked --group dev
+      - run: uv run pytest -q
+      - run: uv run pyright
+      - run: uv build
+      - run: uvx twine check dist/*
+      - run: uv run --no-project --python 3.11 python tests/check_wheel.py dist/*.whl
+      # tests/test_datasets_wheel.py is skipped without GIGAI_WHEEL_DIR: it loads the six shipped slices from the wheel.
+      - run: GIGAI_WHEEL_DIR=dist uv run pytest -q tests/test_datasets_wheel.py
+      - name: "SHA256SUMS over the wheel and the sdist"
+        run: cd dist && sha256sum ./*.whl ./*.tar.gz > SHA256SUMS && cat SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-pypi:
+    name: "publish to PyPI (trusted publishing)"
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: "only the wheel and the sdist are uploaded (not SHA256SUMS)"
+        run: |
+          mkdir publish
+          cp dist/*.whl dist/*.tar.gz publish/
+          ls -l publish
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: publish/
+
+  github-release:
+    name: "GitHub release from CHANGELOG.md"
+    needs: publish-pypi
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: "the CHANGELOG block of this version is the release notes"
+        run: |
+          python3 - "${GITHUB_REF_NAME#v}" <<'EOF'
+          import re, sys
+          from pathlib import Path
+          version = sys.argv[1]
+          text = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          match = re.search(rf"^## {re.escape(version)}(?=\s)[^\n]*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+          notes = match.group(1).strip() if match else ""
+          if not notes:
+              sys.exit(f"CHANGELOG.md has no '## {version}' block with content")
+          Path("release-notes.md").write_text(notes + "\n", encoding="utf-8")
+          prerelease = re.search(r"(a|b|rc)\d+|\.dev\d+", version) is not None
+          Path("prerelease.txt").write_text("--prerelease" if prerelease else "", encoding="utf-8")
+          EOF
+          cat release-notes.md
+      - name: "create the release with the wheel, the sdist and SHA256SUMS"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # shellcheck disable=SC2046
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "gigai-core ${GITHUB_REF_NAME#v}" \
+            --notes-file release-notes.md $(cat prerelease.txt)
+
+  verify-pypi:
+    name: "verify the published version (${{ matrix.os }})"
+    needs: publish-pypi
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: "install gigai-core==<version> from PyPI, polling up to 10 minutes"
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          uv venv --python 3.11 verify
+          for attempt in $(seq 1 40); do
+            if uv pip install --python verify/bin/python --refresh "gigai-core==${version}"; then
+              exit 0
+            fi
+            echo "attempt ${attempt}: gigai-core==${version} not installable yet; waiting 15 s"
+            sleep 15
+          done
+          echo "gigai-core==${version} was not installable within 10 minutes" >&2
+          exit 1
+      - name: "the installed version and the façade (DESIGN 4.9 names, and every name in __all__ imports)"
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          verify/bin/python - "${version}" <<'EOF'
+          import sys
+          import gigai_core
+          assert gigai_core.__version__ == sys.argv[1], gigai_core.__version__
+          design = {
+              "run", "save_run", "open_run", "Run", "Dataset", "DatasetItem", "CallSettings", "ModelProvider",
+              "RecordedProvider", "CallBudget", "JsonlTrace", "read_spans", "compare", "gate", "MinLowerBound",
+              "NoWorseThan", "cohen_kappa", "judge_agreement", "CoreModel", "read_labels", "write_labels",
+          }
+          exported = set(gigai_core.__all__)
+          missing = sorted(design - exported)
+          assert not missing, f"DESIGN 4.9 names missing from gigai_core.__all__: {missing}"
+          for name in gigai_core.__all__:
+              getattr(gigai_core, name)
+          print(gigai_core.__version__, len(exported), "names in __all__;", sorted(exported - design), "beyond DESIGN 4.9")
+          EOF

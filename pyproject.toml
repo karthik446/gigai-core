@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gigai-core"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Typed evaluation records, graders, statistics and run files for GigAI and the edgelab books."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -43,7 +43,7 @@ dev = [
 packages = ["src/gigai_core"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/gigai_core", "tests", "README.md", "LICENSE", "pyproject.toml"]
+include = ["src/gigai_core", "tests", "README.md", "CHANGELOG.md", "LICENSE", "pyproject.toml"]
 exclude = ["**/__pycache__", "**/.pytest_cache"]
 
 [tool.pyright]

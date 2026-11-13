@@ -52,6 +52,10 @@ jobs:
           python-version: "${{ matrix.python }}"
       - run: uv sync --locked --group dev --python ${{ matrix.python }}
       - run: uv run --python ${{ matrix.python }} pytest -q
+      # tests/test_datasets_wheel.py runs only with GIGAI_WHEEL_DIR set: it unpacks the wheel and loads the six
+      # shipped slices from it without the checkout, so the plain run above skips it and this run covers it.
+      - run: uv build --wheel -o /tmp/wheel
+      - run: GIGAI_WHEEL_DIR=/tmp/wheel uv run --python ${{ matrix.python }} pytest -q tests/test_datasets_wheel.py
 
   lowest-direct:
     name: "lowest-direct (pydantic floor)"
@@ -61,13 +65,17 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.11"
+      # Local recipe (the sync below rewrites uv.lock to the lowest resolution; run `uv lock` afterwards):
+      #   UV_PROJECT_ENVIRONMENT=/private/tmp/a9-lowest uv sync --resolution lowest-direct --group dev --python 3.11
+      #   uv pip install --python /private/tmp/a9-lowest/bin/python pydantic==2.10.0
+      #   UV_PROJECT_ENVIRONMENT=/private/tmp/a9-lowest uv run --no-sync pytest -q
       - run: uv sync --resolution lowest-direct --group dev --python 3.11
       # lowest-direct alone lands on pydantic 2.13.0: the `inspect` extra's inspect-ai==0.3.288
       # needs pydantic>=2.13 and uv resolves one universe. Pin the declared floor explicitly.
       - run: uv pip install --python .venv/bin/python "pydantic==2.10.0"
       - name: "print the resolved pydantic version"
         run: uv run --no-sync python -c "import pydantic; print('pydantic', pydantic.VERSION)"
-      - run: uv run --no-sync pytest -q tests/test_models_strict.py tests/test_canonical.py tests/test_core_boundary.py
+      - run: uv run --no-sync pytest -q
 
   build:
     name: "build + twine + wheel contents"
@@ -101,9 +109,9 @@ jobs:
           path: dist/
       - run: uv venv --python 3.11 /tmp/min-deps
       - run: uv pip install --python /tmp/min-deps/bin/python dist/*.whl
-      - name: "import gigai_core loads none of click, jsonschema, pyarrow, gigai, sqlite3"
+      - name: "import gigai_core loads none of click, jsonschema, pyarrow, gigai, sqlite3, numpy, yaml"
         run: |
-          /tmp/min-deps/bin/python -c "import sys, gigai_core; forbidden = {'click', 'jsonschema', 'pyarrow', 'gigai', 'sqlite3'} & set(sys.modules); assert not forbidden, forbidden; print('pydantic' in sys.modules, gigai_core.__version__)"
+          /tmp/min-deps/bin/python -c "import sys, gigai_core; forbidden = {'click', 'jsonschema', 'pyarrow', 'gigai', 'sqlite3', 'numpy', 'yaml'} & set(sys.modules); assert not forbidden, forbidden; print('pydantic' in sys.modules, gigai_core.__version__)"
 
   smoke:
     name: "smoke (wheel and sdist installs)"
