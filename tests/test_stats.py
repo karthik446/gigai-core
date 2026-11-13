@@ -111,7 +111,7 @@ def test_wilson_half_width_at_n60_p085_is_0_090() -> None:
 
 @pytest.mark.parametrize("n", [1, 2, 3, 5, 10, 50, 100, 1000])
 def test_wilson_edges_are_exact_on_every_platform(n: int) -> None:
-    # Linux glibc rounds the vendored centre - half_width to 2.8e-17 at successes == 0; the edge is pinned.
+    # The vendored centre - half_width leaves residues such as 2.8e-17 at successes == 0 (libm-dependent); pinned.
     assert stats.wilson_interval(0, n).ci.lower == 0.0
     assert stats.wilson_interval(n, n).ci.upper == 1.0
     for level in (0.8, 0.9, 0.95, 0.99):
