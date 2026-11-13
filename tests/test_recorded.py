@@ -10,8 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from gigai_core.budget import CallBudget
+from gigai_core.budget import CallBudget, budgeted
 from gigai_core.dataset import Dataset, DatasetItem
+from gigai_core.graders.judge import llm_judge
 from gigai_core.graders.lifted import includes
 from gigai_core.providers import (
     CallCancelled,
@@ -193,3 +194,33 @@ def test_recorded_imports_no_cli_db_or_numeric_library() -> None:
     result = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=60, check=False)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "[]"
+
+
+def test_a_replayed_judge_reads_its_recorded_replies_and_calls_no_model(tmp_path: Path) -> None:
+    """0.3.2 ``test_replay``: the judge's own calls are in the trace, so a replay answers the judge from it too."""
+    verdicts = ['Looks right.\n{"verdict": "pass", "explanation": "yes"}', 'Not it.\n{"verdict": "fail", "explanation": "no"}']
+    live = ScriptedProvider(["yes", verdicts[0], "no", verdicts[1]])
+    budget = CallBudget()
+    judge = llm_judge(budgeted(live, budget), rubric="Is it yes?", settings=SETTINGS, grader_id="rubric-judge")
+    first = run(_dataset(["q0", "q1"]), live, [judge], settings=SETTINGS, budget=budget, trace_dir=tmp_path)
+    assert first.record.trace_path is not None and first.record.calls_made == 4
+    spans = list(read_spans(first.record.trace_path))
+
+    recorded = RecordedProvider(spans, SCRIPTED_IDENTITY)
+    replay_budget = CallBudget()
+    replayed_judge = llm_judge(budgeted(recorded, replay_budget), rubric="Is it yes?", settings=SETTINGS, grader_id="rubric-judge")
+    replayed = run(_dataset(["q0", "q1"]), recorded, [replayed_judge], settings=SETTINGS, budget=replay_budget)
+    assert replayed.values("rubric-judge") == first.values("rubric-judge") == {"item-0": 1.0, "item-1": 0.0}
+    assert replayed.record.calls_made == 4 and len(live.requests) == 4
+    for mine, theirs in zip(replayed.samples, first.samples, strict=True):
+        assert [span.text for span in mine.model_spans] == [span.text for span in theirs.model_spans]
+    for mine_score, theirs_score in zip(replayed.scores, first.scores, strict=True):
+        assert (mine_score.kind, mine_score.judge_prompt_sha256, mine_score.explanation) == ("model", theirs_score.judge_prompt_sha256, theirs_score.explanation)
+
+    subject_only = [span for span in spans if not isinstance(span, ModelSpan) or span.last_turn.content.startswith("q")]
+    assert len(subject_only) == len(spans) - 2
+    without_judge = RecordedProvider(subject_only, SCRIPTED_IDENTITY)
+    starved_judge = llm_judge(without_judge, rubric="Is it yes?", settings=SETTINGS, grader_id="rubric-judge")
+    with pytest.raises(ProviderError) as caught:
+        run(_dataset(["q0", "q1"]), without_judge, [starved_judge], settings=SETTINGS, budget=CallBudget())
+    assert caught.value.code == "no_recorded_answer"

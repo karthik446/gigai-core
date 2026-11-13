@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import subprocess
 import sys
 import textwrap
@@ -23,11 +24,12 @@ def test_importing_core_and_canonical_loads_none_of_the_forbidden_modules() -> N
     )
     result = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=60, check=False)
     assert result.returncode == 0, result.stderr
-    assert result.stdout.splitlines() == ["[]", "0.1.0.dev0"]
+    assert result.stdout.splitlines() == ["[]", importlib.metadata.version("gigai-core")]
 
 
-def test_package_ships_py_typed_and_an_all_of_version_only() -> None:
+def test_package_ships_py_typed_and_all_is_the_facade() -> None:
     import gigai_core
+    from tests.test_facade import FACADE
 
     assert (SRC / "py.typed").is_file()
-    assert gigai_core.__all__ == ["__version__"]
+    assert gigai_core.__all__ == FACADE

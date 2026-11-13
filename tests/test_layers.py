@@ -98,7 +98,7 @@ def test_no_module_imports_a_layer_at_or_above_itself_and_narrow_modules_stay_na
                 continue
             where = f"{path.relative_to(SRC)}:{line} imports {module}"
             if here == "":
-                offenders.append(f"{where} (the package root imports nothing from core)")
+                continue  # the façade (__init__) sits above every layer; nothing imports it back (see _top)
             elif LAYER[target] >= LAYER[here]:
                 offenders.append(f"{where} (layer {LAYER[target]} >= {LAYER[here]})")
             elif here in ONLY and target not in ONLY[here]:
