@@ -3,7 +3,7 @@
 - Upstream: https://github.com/UKGovernmentBEIS/inspect_ai at commit `9567b431e7174480e56826b435da8f9f1de73bb8` (the commit of the statistics in `../DIFF.md`), files fetched from `https://raw.githubusercontent.com/UKGovernmentBEIS/inspect_ai/9567b431e7174480e56826b435da8f9f1de73bb8/<upstream path>`; re-fetched and byte-compared on 2026-11-10.
 - Licence: MIT, "Copyright (c) 2024 UK AI Security Institute"; the upstream `LICENSE` beside the statistics (`../LICENSE`) covers these files too. Every lifted file starts with `# Lifted from inspect_ai <upstream path> @ 9567b431 (MIT, Copyright (c) 2024 UK AI Security Institute)`; the shim and `__init__.py` say they are gigai-written.
 - Recipe: gigai-2 evals respike S-smoke §S1.4 (scorer bodies behind a shim) and the S1 table row for `_model.py` (keep the template and the grade pattern only), plus the import edits a flat package needs.
-- `tests/test_scorers_lifted.py` recomputes the vendored sha256 column, rebuilds each upstream file by reverse-applying the diff below and checks it against the upstream sha256 column. Change a vendored file and you must regenerate this file (the diff with `diff -u --label inspect_ai@9567b431/<upstream path> --label src/gigai_core/_vendor/inspect_ai/scorers/<file> <upstream> <vendored>`, then both hash columns).
+- `tests/test_graders_lifted.py` recomputes the vendored sha256 column, rebuilds each upstream file by reverse-applying the diff below and checks it against the upstream sha256 column. Change a vendored file and you must regenerate this file (the diff with `diff -u --label inspect_ai@9567b431/<upstream path> --label src/gigai_core/_vendor/inspect_ai/scorers/<file> <upstream> <vendored>`, then both hash columns).
 
 ## Files
 

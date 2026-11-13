@@ -28,7 +28,7 @@
 - Numpy removal (74 diff lines, all in `std.py`): every lazy `import numpy as np` becomes `pass  # numpy import removed`; `np.std`/`np.var` with `ddof=1` become `statistics.stdev`/`statistics.variance`, `np.std` (ddof 0) becomes `statistics.pstdev`, `np.mean` becomes `statistics.fmean`, `np.sqrt` becomes `math.sqrt`, `np.random.choice(..., replace=True)` becomes `random.choices`, `np.quantile` becomes `_quantile` (linear interpolation, numpy's default, Hyndman and Fan 1996 type 7), `np.prod(1 - k / np.arange(...))` becomes `math.prod(...)` over a generator; `std.py` gains `import random`, `import statistics`.
 - Import edits (3 source lines): `from .._metric import` becomes `from ._metric import` in std, krippendorff, accuracy. S had 2 edited lines because it kept upstream's package tree.
 - Not carried into gigai-core: gigai 0.3.x also vendored `grouped.py` (`grouped`) and `reducer.py` (`mode_score`, `majority_score`, `mean_score`, `median_score`, `at_least`, `pass_at`, `pass_k`, `max_score`, `collect_score`); core's statistics layer does its own grouping and keeps one score per sample, so both files and the `ScoreReducer`/`score_reducer` shim pieces were dropped.
-- Retyped for pyright strict in gigai-core (gigai-written shims only, upstream-derived files unchanged): `_metric.py` and `scorers/_shim.py` gain full annotations (`metric()` keeps its passthrough behaviour, with overloads), and the `__init__.py` docstrings no longer name gigai paths; the `sha256` rows below are of the retyped files. The test homes named for the scorer shims (`tests/test_scorers_lifted.py`, `tests/test_judge_validation.py`) arrive with the graders packets.
+- Retyped for pyright strict in gigai-core (gigai-written shims only, upstream-derived files unchanged): `_metric.py` and `scorers/_shim.py` gain full annotations (`metric()` keeps its passthrough behaviour, with overloads), and the `__init__.py` docstrings no longer name gigai paths; the `sha256` rows below are of the retyped files. The test homes named for the scorer shims are `tests/test_graders_lifted.py` and (arriving with the judge packet) `tests/test_judge_validation.py`.
 
 ## Behaviour differences from upstream
 
@@ -50,7 +50,7 @@ The bootstrap draws from Python's `random` module (`random.choices`) instead of 
 
 ## Scorers (`scorers/`)
 
-The `match`, `includes` and `pattern` scorer bodies, their helpers and the model-graded judge template are vendored from the same commit into the `scorers/` subpackage, under the same `LICENSE` (above). Their hash table, change counts, behaviour differences and diff are in `scorers/DIFF.md`, checked by `tests/test_scorers_lifted.py`; this file covers the top-level statistics files only.
+The `match`, `includes` and `pattern` scorer bodies, their helpers and the model-graded judge template are vendored from the same commit into the `scorers/` subpackage, under the same `LICENSE` (above). Their hash table, change counts, behaviour differences and diff are in `scorers/DIFF.md`, checked by `tests/test_graders_lifted.py`; this file covers the top-level statistics files only.
 
 ## Diff against upstream (`diff -u`, generated, not hand-edited)
 

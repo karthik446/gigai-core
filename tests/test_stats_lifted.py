@@ -329,7 +329,7 @@ def test_a_nan_score_silently_corrupts_the_bootstrap_ci(lifted: Lifted) -> None:
     assert any(not math.isnan(bound) for interval in intervals for bound in interval.values()), "no seed gave a finite bound"
 
 
-def _diff_sections(diff_md: str) -> dict[str, list[str]]:
+def diff_sections(diff_md: str) -> dict[str, list[str]]:
     block = diff_md.split("```diff\n", 1)[1].rsplit("```", 1)[0]
     sections: dict[str, list[str]] = {}
     current: list[str] = []
@@ -343,7 +343,7 @@ def _diff_sections(diff_md: str) -> dict[str, list[str]]:
     return sections
 
 
-def _reverse_apply(vendored: list[str], diff: list[str]) -> list[str]:
+def reverse_apply(vendored: list[str], diff: list[str]) -> list[str]:
     """Rebuild the upstream file from the vendored file and its `diff -u` (upstream -> vendored)."""
     upstream: list[str] = []
     cursor = 0
@@ -377,11 +377,11 @@ def test_diff_md_records_the_vendored_and_upstream_hashes() -> None:
         assert hashlib.sha256((VENDOR / name).read_bytes()).hexdigest() == vendored_sha, f"{name} changed without updating DIFF.md"
     assert table["LICENSE"][0] == table["LICENSE"][1]
 
-    sections = _diff_sections(diff_md)
+    sections = diff_sections(diff_md)
     assert set(sections) == set(LIFTED)
     for name, diff in sections.items():
         vendored = (VENDOR / name).read_text(encoding="utf-8").splitlines()
-        upstream = "\n".join(_reverse_apply(vendored, diff)) + "\n"
+        upstream = "\n".join(reverse_apply(vendored, diff)) + "\n"
         assert hashlib.sha256(upstream.encode("utf-8")).hexdigest() == table[name][0], f"{name}: diff and upstream hash disagree"
 
 
