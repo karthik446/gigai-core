@@ -1,7 +1,7 @@
 """The import graph of `gigai_core` is layered, acyclic and never reaches back into gigai.
 
 DESIGN.md section 3: `models`, `values` and `canonical` import nothing from core; above them
-`providers` -> `budget`, `trace`, `dataset`, `stats` -> `sample`, `score` -> `records`, `graders`,
+`providers` -> `budget`, `trace`, `dataset`, `stats` -> `sample`, `score`, `records` -> `graders`,
 `agent` -> `run` -> `comparison`, `agreement` -> `gate`; `datasets/` imports `dataset` and `recorded`
 imports `providers`/`trace` only. Modules that do not exist yet are simply absent; a module that is
 not in the table fails the test until the table grows.
@@ -31,7 +31,7 @@ LAYER = {
     "score": 3,
     "datasets": 3,
     "recorded": 3,
-    "records": 4,
+    "records": 3,
     "graders": 4,
     "agent": 4,
     "run": 5,
