@@ -42,7 +42,7 @@ LAYER = {
 # Modules whose imports from core are narrower than "anything below".
 ONLY = {
     "stats": {"models", "values"},
-    "datasets": {"dataset", "models", "values", "canonical"},
+    "datasets": {"dataset", "models", "values", "canonical", "providers"},
     "recorded": {"providers", "trace", "models", "values", "canonical"},
 }
 GIGAI_REFERENCE = re.compile(r"gigai[./]")

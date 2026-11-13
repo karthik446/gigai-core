@@ -1,7 +1,7 @@
 """Check what a built `gigai_core` wheel ships: `python tests/check_wheel.py dist/*.whl`.
 
-Must list `py.typed`, the three vendor LICENSE files and the autoevals templates; must not list
-a schema file, migrations or a `store/` package (those stay in gigai).
+Must list `py.typed`, the three vendor LICENSE files, the autoevals templates, the datasets NOTICES and the six shipped
+slices with their digests; must not list a schema file, migrations or a `store/` package (those stay in gigai).
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import sys
 import zipfile
 from pathlib import Path
 
+SHIPPED_SETS = ("tinygsm8k", "tinymmlu", "ifeval", "jsonschemabench", "contractnli", "ragtruth")
 REQUIRED = (
     "gigai_core/py.typed",
     "gigai_core/_vendor/inspect_ai/LICENSE",
@@ -18,6 +19,8 @@ REQUIRED = (
     "gigai_core/_vendor/autoevals/templates/battle.yaml",
     "gigai_core/_vendor/autoevals/templates/closed_q_a.yaml",
     "gigai_core/_vendor/autoevals/templates/factuality.yaml",
+    "gigai_core/datasets/NOTICES.md",
+    *(f"gigai_core/datasets/data/{name}.{suffix}" for name in SHIPPED_SETS for suffix in ("jsonl", "sha256")),
 )
 FORBIDDEN_PARTS = ("migrations", "store")
 FORBIDDEN_SUFFIXES = (".schema.json",)

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from pathlib import Path
+
+from pydantic import ValidationError
 
 from .canonical import sha256_hex
 from .models import CoreModel
@@ -12,6 +15,19 @@ from .values import JsonValue
 
 class DatasetDigestMismatch(Exception):
     """The file's items do not hash to the digest the caller expected."""
+
+
+class DatasetFileError(Exception):
+    """A slice line this version cannot read: a stray key (the retired ``cluster`` alias), a missing field, bad JSON.
+
+    The message is ``<path> line <n>: <reason>``; ``path`` and ``line`` are also attributes.
+    """
+
+    def __init__(self, path: Path, line: int, reason: str) -> None:
+        """Name the file, the 1-based line and why it could not be read."""
+        super().__init__(f"{path} line {line}: {reason}")
+        self.path = path
+        self.line = line
 
 
 class SliceRecipe(CoreModel):
@@ -84,3 +100,26 @@ class Dataset(CoreModel):
         kept = tuple(items)
         ref = DatasetRef(id=id, version=version, sha256=items_sha256(kept))
         return cls(ref=ref, items=kept)
+
+    @classmethod
+    def from_jsonl(cls, path: Path, *, expect_sha256: str | None = None) -> Dataset:
+        """Read one slice file, one ``DatasetItem.model_validate_json`` per line.
+
+        The dataset id is the file's stem. Raises ``DatasetFileError`` with the 1-based line number for a line that
+        does not validate (a stray key such as the retired ``cluster`` alias is an error, not a silent drop) and
+        ``DatasetDigestMismatch`` when ``expect_sha256`` differs from ``items_sha256`` of the items read.
+        """
+        items: list[DatasetItem] = []
+        with path.open("rb") as file:
+            for number, raw in enumerate(file, start=1):
+                line = raw.rstrip(b"\r\n")
+                if not line:
+                    continue
+                try:
+                    items.append(DatasetItem.model_validate_json(line))
+                except ValidationError as error:
+                    raise DatasetFileError(path, number, str(error)) from error
+        digest = items_sha256(items)
+        if expect_sha256 is not None and digest != expect_sha256:
+            raise DatasetDigestMismatch(f"{path}: items hash to {digest}, expected {expect_sha256}")
+        return cls(ref=DatasetRef(id=path.stem, version="1", sha256=digest), items=tuple(items))
