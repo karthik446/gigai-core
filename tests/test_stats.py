@@ -109,6 +109,27 @@ def test_wilson_half_width_at_n60_p085_is_0_090() -> None:
         stats.wilson_interval(cast(int, 5.0), 60)  # cast reaches the runtime check on an untyped caller
 
 
+@pytest.mark.parametrize("n", [1, 2, 3, 5, 10, 50, 100, 1000])
+def test_wilson_edges_are_exact_on_every_platform(n: int) -> None:
+    # Linux glibc rounds the vendored centre - half_width to 2.8e-17 at successes == 0; the edge is pinned.
+    assert stats.wilson_interval(0, n).ci.lower == 0.0
+    assert stats.wilson_interval(n, n).ci.upper == 1.0
+    for level in (0.8, 0.9, 0.95, 0.99):
+        assert stats.wilson_interval(0, n, level).ci.lower == 0.0
+        assert stats.wilson_interval(n, n, level).ci.upper == 1.0
+
+
+@pytest.mark.parametrize("n", [1, 2, 3, 7, 25, 100])
+@pytest.mark.parametrize("level", [0.8, 0.9, 0.95, 0.99])
+def test_wilson_bounds_stay_inside_unit_interval_and_bracket_the_proportion(n: int, level: float) -> None:
+    for successes in range(n + 1):
+        result = stats.wilson_interval(successes, n, level)
+        lower, upper = result.ci.lower, result.ci.upper
+        assert 0.0 <= lower <= result.proportion <= upper <= 1.0
+        assert result.half_width == (upper - lower) / 2
+        assert result.ci.level == level
+
+
 def test_noise_bound_is_0_335() -> None:
     result = stats.noise_bound(0.167, 0.595, 48)
 

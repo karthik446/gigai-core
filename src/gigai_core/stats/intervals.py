@@ -234,7 +234,11 @@ def wilson_interval(successes: int, n: int, level: float = 0.95) -> WilsonInterv
     """How uncertain one arm's accuracy is, with bounds that stay sensible near 0 % and 100 %.
 
     Calls the vendored `ci_wilson` (Wilson 1927; Brown, Cai & DasGupta 2001,
-    https://doi.org/10.1214/ss/1009213286, fetched 2026-11-09).
+    https://doi.org/10.1214/ss/1009213286, fetched 2026-11-09), then pins the edges: the lower
+    bound is exactly 0.0 when ``successes == 0`` and the upper bound exactly 1.0 when
+    ``successes == n`` (the vendored ``centre - half_width`` leaves a rounding residue such as
+    2.8e-17 on some platforms and sizes), and both bounds are clamped to [0, 1]. ``half_width`` is half the length
+    of the final interval.
 
     Args:
         successes: Items the arm got right.
@@ -251,7 +255,8 @@ def wilson_interval(successes: int, n: int, level: float = 0.95) -> WilsonInterv
     two_sided_z(level)
     scores = [SampleScore(score=Score(value=1.0 if i < successes else 0.0), sample_id=i) for i in range(n)]
     interval = ci_wilson(level=level)(scores)
-    lower, upper = _bound(interval, "lower"), _bound(interval, "upper")
+    lower = 0.0 if successes == 0 else min(max(_bound(interval, "lower"), 0.0), 1.0)
+    upper = 1.0 if successes == n else min(max(_bound(interval, "upper"), 0.0), 1.0)
     return WilsonInterval(
         successes=successes,
         n=n,
