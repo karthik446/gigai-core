@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "ci-${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+env:
+  UV_PYTHON_PREFERENCE: only-managed
+
+jobs:
+  lint:
+    name: "ruff (pinned)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uvx ruff@0.16.10 check src tests
+
+  types:
+    name: "pyright strict + mypy consumer smoke"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - run: uv sync --locked --group dev
+      - run: uv run pyright
+      - name: "mypy --strict on a downstream consumer (non-gating)"
+        continue-on-error: true
+        run: uv run mypy --strict tests/consumer/consumer.py
+
+  tests:
+    name: "pytest ${{ matrix.python }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "${{ matrix.python }}"
+      - run: uv sync --locked --group dev --python ${{ matrix.python }}
+      - run: uv run --python ${{ matrix.python }} pytest -q
+
+  lowest-direct:
+    name: "lowest-direct (pydantic floor)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - run: uv sync --resolution lowest-direct --group dev --python 3.11
+      # lowest-direct alone lands on pydantic 2.13.0: the `inspect` extra's inspect-ai==0.3.288
+      # needs pydantic>=2.13 and uv resolves one universe. Pin the declared floor explicitly.
+      - run: uv pip install --python .venv/bin/python "pydantic==2.10.0"
+      - name: "print the resolved pydantic version"
+        run: uv run --no-sync python -c "import pydantic; print('pydantic', pydantic.VERSION)"
+      - run: uv run --no-sync pytest -q tests/test_models_strict.py tests/test_canonical.py tests/test_core_boundary.py
+
+  build:
+    name: "build + twine + wheel contents"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - run: uv build
+      - run: uvx twine check dist/*
+      - run: uv run --no-project --python 3.11 python tests/check_wheel.py dist/*.whl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  min-deps:
+    name: "min-deps (wheel without extras)"
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - run: uv venv --python 3.11 /tmp/min-deps
+      - run: uv pip install --python /tmp/min-deps/bin/python dist/*.whl
+      - name: "import gigai_core loads none of click, jsonschema, pyarrow, gigai, sqlite3"
+        run: |
+          /tmp/min-deps/bin/python -c "import sys, gigai_core; forbidden = {'click', 'jsonschema', 'pyarrow', 'gigai', 'sqlite3'} & set(sys.modules); assert not forbidden, forbidden; print('pydantic' in sys.modules, gigai_core.__version__)"
+
+  smoke:
+    name: "smoke (wheel and sdist installs)"
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: "install the wheel in a fresh venv"
+        run: |
+          uv venv --python 3.11 /tmp/smoke-wheel
+          uv pip install --python /tmp/smoke-wheel/bin/python dist/*.whl
+          /tmp/smoke-wheel/bin/python -c "import gigai_core; print('wheel', gigai_core.__version__)"
+      - name: "install the sdist in a fresh venv"
+        run: |
+          uv venv --python 3.11 /tmp/smoke-sdist
+          uv pip install --python /tmp/smoke-sdist/bin/python dist/*.tar.gz
+          /tmp/smoke-sdist/bin/python -c "import gigai_core; print('sdist', gigai_core.__version__)"

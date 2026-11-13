@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gigai-core"
+version = "0.1.0.dev0"
+description = "Typed evaluation records, graders, statistics and run files for GigAI and the edgelab books."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0 AND MIT"
+license-files = ["LICENSE", "src/gigai_core/_vendor/*/LICENSE"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "pydantic>=2.10,<3",
+]
+
+[project.optional-dependencies]
+parquet = ["pyarrow>=18"]
+inspect = ["inspect-ai==0.3.288", "agent-client-protocol<1"]
+schema = ["jsonschema>=4.23"]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pyright==1.1.414",
+  "ruff==0.16.10",
+  "mypy>=1.14",
+  "pyarrow>=18",
+  "jsonschema>=4.23",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gigai_core"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/gigai_core", "tests", "README.md", "LICENSE", "pyproject.toml"]
+exclude = ["**/__pycache__", "**/.pytest_cache"]
+
+[tool.pyright]
+include = ["src/gigai_core", "tests"]
+exclude = ["src/gigai_core/_vendor"]
+typeCheckingMode = "strict"
+pythonVersion = "3.11"
+
+[tool.ruff]
+extend-exclude = ["src/gigai_core/_vendor"]
+
+[tool.ruff.lint]
+select = ["F", "I", "UP", "ANN401", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
