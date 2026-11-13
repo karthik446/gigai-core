@@ -2,7 +2,7 @@
 
 DESIGN.md section 3: `models`, `values` and `canonical` import nothing from core; above them
 `providers` -> `budget`, `trace`, `dataset`, `stats` -> `sample`, `score` -> `records`, `graders`,
-`agent` -> `run` -> `comparison`, `gate`, `agreement`; `datasets/` imports `dataset` and `recorded`
+`agent` -> `run` -> `comparison`, `agreement` -> `gate`; `datasets/` imports `dataset` and `recorded`
 imports `providers`/`trace` only. Modules that do not exist yet are simply absent; a module that is
 not in the table fails the test until the table grows.
 """
@@ -36,7 +36,7 @@ LAYER = {
     "agent": 4,
     "run": 5,
     "comparison": 6,
-    "gate": 6,
+    "gate": 7,
     "agreement": 6,
 }
 # Modules whose imports from core are narrower than "anything below".
